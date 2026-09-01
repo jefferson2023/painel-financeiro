@@ -114,21 +114,21 @@ async function editItem(id, currentValue, currentDue=null, isExpense=false){
   let vencimento = currentDue;
   if(isExpense){
     const shownDate = currentDue ? currentDue.split('-').reverse().join('/') : '';
-    const dateAnswer = prompt('Digite o vencimento (DD/MM/AAAA):', shownDate);
+    const dateAnswer = prompt('Digite o vencimento (AAAA-MM-DD), por exemplo 2026-09-01:', currentDue || '');
     if(dateAnswer === null) return;
 
     const value = dateAnswer.trim();
     if(value === ''){
       vencimento = null;
     } else {
-      const m=value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-      if(!m){alert('Use o formato DD/MM/AAAA.');return}
-      vencimento=`${m[3]}-${m[2]}-${m[1]}`;
-      const d=new Date(vencimento+'T00:00:00');
-      if(Number.isNaN(d.getTime()) || d.getFullYear()!=Number(m[3]) || d.getMonth()+1!=Number(m[2]) || d.getDate()!=Number(m[1])){
+      const m=value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if(!m){alert('Use o formato AAAA-MM-DD, por exemplo 2026-09-01.');return}
+      const d=new Date(value+'T00:00:00');
+      if(Number.isNaN(d.getTime()) || d.getFullYear()!=Number(m[1]) || d.getMonth()+1!=Number(m[2]) || d.getDate()!=Number(m[3])){
         alert('Digite uma data válida.');
         return;
       }
+      vencimento=value;
     }
   }
 
