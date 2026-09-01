@@ -70,8 +70,10 @@ async function addTransaction(tipo){
  document.getElementById(descId).value='';document.getElementById(valId).value='';if(tipo==='despesa')document.getElementById('expenseDue').value='';loadData();
 }
 async function editDueDate(id, currentDue){
-  const answer = prompt('Digite o novo vencimento (DD/MM/AAAA). Deixe vazio para remover:', currentDue ? currentDue.split('-').reverse().join('/') : '');
+  const shown = currentDue ? currentDue.split('-').reverse().join('/') : '';
+  const answer = prompt('Digite o vencimento (DD/MM/AAAA):', shown);
   if(answer === null) return;
+
   const value = answer.trim();
   if(value === ''){
     const {error}=await db.from('lancamentos').update({vencimento:null}).eq('id',id);
@@ -79,14 +81,27 @@ async function editDueDate(id, currentDue){
     loadData();
     return;
   }
-  const m=value.match(/^(\\d{2})\/(\\d{2})\/(\\d{4})$/);
-  if(!m){alert('Use o formato DD/MM/AAAA.');return}
-  const iso=`${m[3]}-${m[2]}-${m[1]}`;
-  const d=new Date(iso+'T00:00:00');
-  if(Number.isNaN(d.getTime()) || d.getFullYear()!=Number(m[3]) || d.getMonth()+1!=Number(m[2]) || d.getDate()!=Number(m[1])){
+
+  let iso = '';
+  let m = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if(m){
+    iso = `${m[3]}-${m[2]}-${m[1]}`;
+  } else {
+    m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(m) iso = value;
+  }
+
+  if(!iso){
+    alert('Data inválida. Use DD/MM/AAAA, por exemplo 01/09/2026.');
+    return;
+  }
+
+  const d = new Date(iso+'T00:00:00');
+  if(Number.isNaN(d.getTime()) || d.getFullYear()!=Number(iso.slice(0,4)) || d.getMonth()+1!=Number(iso.slice(5,7)) || d.getDate()!=Number(iso.slice(8,10))){
     alert('Digite uma data válida.');
     return;
   }
+
   const {error}=await db.from('lancamentos').update({vencimento:iso}).eq('id',id);
   if(error){alert('Erro ao alterar vencimento: '+error.message);return}
   loadData();
@@ -114,21 +129,29 @@ async function editItem(id, currentValue, currentDue=null, isExpense=false){
   let vencimento = currentDue;
   if(isExpense){
     const shownDate = currentDue ? currentDue.split('-').reverse().join('/') : '';
-    const dateAnswer = prompt('Digite o vencimento (AAAA-MM-DD), por exemplo 2026-09-01:', currentDue || '');
+    const dateAnswer = prompt('Digite o vencimento (DD/MM/AAAA):', shownDate);
     if(dateAnswer === null) return;
 
     const value = dateAnswer.trim();
     if(value === ''){
       vencimento = null;
     } else {
-      const m=value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if(!m){alert('Use o formato AAAA-MM-DD, por exemplo 2026-09-01.');return}
-      const d=new Date(value+'T00:00:00');
-      if(Number.isNaN(d.getTime()) || d.getFullYear()!=Number(m[1]) || d.getMonth()+1!=Number(m[2]) || d.getDate()!=Number(m[3])){
+      let iso = '';
+      let m = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if(m){
+        iso = `${m[3]}-${m[2]}-${m[1]}`;
+      } else {
+        m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if(m) iso = value;
+      }
+
+      if(!iso){alert('Data inválida. Use DD/MM/AAAA, por exemplo 01/09/2026.');return}
+      const d=new Date(iso+'T00:00:00');
+      if(Number.isNaN(d.getTime()) || d.getFullYear()!=Number(iso.slice(0,4)) || d.getMonth()+1!=Number(iso.slice(5,7)) || d.getDate()!=Number(iso.slice(8,10))){
         alert('Digite uma data válida.');
         return;
       }
-      vencimento=value;
+      vencimento=iso;
     }
   }
 
