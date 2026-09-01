@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Painel Financeiro</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#090b10;--panel:#11151d;--panel2:#151a23;--border:#252c38;--text:#f5f7fb;--muted:#8d98aa;--green:#24d18a;--red:#ff5f6d;--blue:#7c8cff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#182033 0,#090b10 48%);color:var(--text);font-family:Inter,Segoe UI,Arial,sans-serif;min-height:100vh}
+button,input{font:inherit}.hidden{display:none!important}
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}.login-card{width:min(430px,100%);background:rgba(17,21,29,.94);border:1px solid var(--border);border-radius:22px;padding:34px;box-shadow:0 24px 70px #0008}
+.logo{font-size:36px;margin-bottom:8px}.login-card h1{margin:0 0 7px}.muted{color:var(--muted)}input{width:100%;background:#0c1017;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:13px 14px;margin:7px 0;outline:none}input:focus{border-color:var(--blue)}
+.primary{width:100%;margin-top:9px;background:var(--blue);color:white;border:0;border-radius:12px;padding:13px;font-weight:800;cursor:pointer}.error{color:#ff7c87;min-height:22px;margin-top:9px;font-size:14px}
+#app{max-width:1150px;margin:auto;padding:30px 20px 50px}.top{display:flex;align-items:center;justify-content:space-between;gap:15px}.brand h1{margin:0;font-size:29px}.brand p{margin:5px 0 0}.logout{background:#1b212c;color:#dce2ed;border:1px solid var(--border);padding:10px 15px;border-radius:11px;cursor:pointer}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:27px 0 19px}.card{background:linear-gradient(145deg,#141a23,#10141b);border:1px solid var(--border);border-radius:18px;padding:20px;box-shadow:0 10px 30px #0003}.card .label{color:var(--muted);font-size:14px}.card strong{display:block;font-size:27px;margin-top:9px}.balance{border-color:#303a52}
+.forms{display:grid;grid-template-columns:1fr 1fr;gap:18px}.panel{background:rgba(17,21,29,.94);border:1px solid var(--border);border-radius:18px;padding:20px}.panel h2{margin:0 0 13px}.income h2{color:var(--green)}.expense h2{color:var(--red)}.add{width:100%;border:0;border-radius:11px;padding:12px;color:#fff;font-weight:800;cursor:pointer}.income .add{background:#13885f}.expense .add{background:#b83c49}.list{display:flex;flex-direction:column;gap:9px;margin-top:17px}.item{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;background:#0d1118;border:1px solid #202733;border-radius:12px;padding:12px}.item b{display:block}.item small{color:var(--muted)}.amount{font-weight:800}.income .amount{color:var(--green)}.expense .amount{color:var(--red)}.delete{background:#1b212c;color:#aeb7c6;border:1px solid var(--border);border-radius:8px;padding:6px 9px;cursor:pointer}.empty{color:var(--muted);text-align:center;padding:16px}
+@media(max-width:720px){.summary,.forms{grid-template-columns:1fr}.item{grid-template-columns:1fr auto}.item .delete{grid-column:2;grid-row:1/3}}
+</style>
+</head>
+<body>
+<div id="login">
+ <div class="login-card">
+  <div class="logo">💰</div><h1>Painel Financeiro</h1>
+  <p class="muted">Acesse seu painel pessoal.</p>
+  <input id="email" type="email" placeholder="Seu e-mail" autocomplete="email">
+  <input id="password" type="password" placeholder="Senha" autocomplete="current-password">
+  <button class="primary" onclick="signIn()">Entrar</button>
+  <div id="loginError" class="error"></div>
+ </div>
+</div>
+<div id="app" class="hidden">
+ <div class="top"><div class="brand"><h1>💰 Painel Financeiro</h1><p class="muted">Receitas, despesas e saldo</p></div><button class="logout" onclick="signOut()">Sair</button></div>
+ <div class="summary">
+  <div class="card"><span class="label">Total de receitas</span><strong id="totalIncome">R$ 0,00</strong></div>
+  <div class="card"><span class="label">Total de despesas</span><strong id="totalExpense">R$ 0,00</strong></div>
+  <div class="card balance"><span class="label">Sobra (receitas − despesas)</span><strong id="balance">R$ 0,00</strong></div>
+ </div>
+ <div class="forms">
+  <section class="panel income"><h2>Receitas</h2><input id="incomeDesc" placeholder="Descrição da receita"><input id="incomeValue" type="number" min="0" step="0.01" placeholder="Valor (R$)"><button class="add" onclick="addTransaction('receita')">+ Adicionar receita</button><div id="incomeList" class="list"></div></section>
+  <section class="panel expense"><h2>Despesas</h2><input id="expenseDesc" placeholder="Descrição da despesa"><input id="expenseValue" type="number" min="0" step="0.01" placeholder="Valor (R$)"><button class="add" onclick="addTransaction('despesa')">+ Adicionar despesa</button><div id="expenseList" class="list"></div></section>
+ </div>
+</div>
+<script>
+const SUPABASE_URL="https://ovqefyojfepysydkxmwf.supabase.co";
+const SUPABASE_KEY="sb_publishable_VRXWdNp5ZY0NGNgUS5--Rw_FaEa1Oml";
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+function money(v){return Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+function showLogin(msg=""){document.getElementById('login').classList.remove('hidden');document.getElementById('app').classList.add('hidden');document.getElementById('loginError').textContent=msg}
+function showApp(){document.getElementById('login').classList.add('hidden');document.getElementById('app').classList.remove('hidden');loadData();}
+async function signIn(){
+ const email=document.getElementById('email').value.trim(), password=document.getElementById('password').value;
+ const {error}=await db.auth.signInWithPassword({email,password});
+ if(error){document.getElementById('loginError').textContent='E-mail ou senha incorretos.';return}
+ document.getElementById('loginError').textContent='';
+}
+async function signOut(){await db.auth.signOut();showLogin();}
+async function loadData(){
+ const {data,error}=await db.from('lancamentos').select('*').order('criado_em',{ascending:true});
+ if(error){alert('Não foi possível carregar os lançamentos. Verifique as políticas do banco.');console.error(error);return}
+ render(data||[]);
+}
+async function addTransaction(tipo){
+ const descId=tipo==='receita'?'incomeDesc':'expenseDesc', valId=tipo==='receita'?'incomeValue':'expenseValue';
+ const descricao=document.getElementById(descId).value.trim(), valor=Number(document.getElementById(valId).value);
+ if(!descricao||!valor||valor<0){alert('Informe a descrição e um valor válido.');return}
+ const {error}=await db.from('lancamentos').insert({tipo,descricao,valor});
+ if(error){alert('Erro ao salvar: '+error.message);return}
+ document.getElementById(descId).value='';document.getElementById(valId).value='';loadData();
+}
+async function removeItem(id){
+ const {error}=await db.from('lancamentos').delete().eq('id',id);
+ if(error){alert('Erro ao excluir: '+error.message);return}loadData();
+}
+function render(rows){
+ const receitas=rows.filter(x=>x.tipo==='receita'), despesas=rows.filter(x=>x.tipo==='despesa');
+ const tr=receitas.reduce((s,x)=>s+Number(x.valor),0), td=despesas.reduce((s,x)=>s+Number(x.valor),0);
+ document.getElementById('totalIncome').textContent=money(tr);document.getElementById('totalExpense').textContent=money(td);document.getElementById('balance').textContent=money(tr-td);
+ renderList('incomeList',receitas);renderList('expenseList',despesas);
+}
+function renderList(id,rows){
+ const el=document.getElementById(id); if(!rows.length){el.innerHTML='<div class="empty">Nenhum lançamento.</div>';return}
+ el.innerHTML=rows.slice().reverse().map(x=>`<div class="item"><div><b>${esc(x.descricao)}</b><small>${new Date(x.criado_em).toLocaleString('pt-BR')}</small></div><span class="amount">${money(x.valor)}</span><button class="delete" onclick="removeItem('${x.id}')">Excluir</button></div>`).join('');
+}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+db.auth.onAuthStateChange((event,session)=>{if(session)showApp();else showLogin();});
+document.getElementById('password').addEventListener('keydown',e=>{if(e.key==='Enter')signIn()});
+</script>
+</body>
+</html>
