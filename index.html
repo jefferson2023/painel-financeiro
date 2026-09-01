@@ -121,7 +121,7 @@ async function editItem(id, currentValue, currentDue=null, isExpense=false){
     if(value === ''){
       vencimento = null;
     } else {
-      const m=value.match(/^(\\d{2})\\/(\\d{2})\\/(\\d{4})$/);
+      const m=value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
       if(!m){alert('Use o formato DD/MM/AAAA.');return}
       vencimento=`${m[3]}-${m[2]}-${m[1]}`;
       const d=new Date(vencimento+'T00:00:00');
