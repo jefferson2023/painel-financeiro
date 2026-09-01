@@ -69,13 +69,36 @@ async function addTransaction(tipo){
  if(error){alert('Erro ao salvar: '+error.message);return}
  document.getElementById(descId).value='';document.getElementById(valId).value='';if(tipo==='despesa')document.getElementById('expenseDue').value='';loadData();
 }
+async function editDueDate(id, currentDue){
+  const answer = prompt('Digite o novo vencimento (DD/MM/AAAA). Deixe vazio para remover:', currentDue ? currentDue.split('-').reverse().join('/') : '');
+  if(answer === null) return;
+  const value = answer.trim();
+  if(value === ''){
+    const {error}=await db.from('lancamentos').update({vencimento:null}).eq('id',id);
+    if(error){alert('Erro ao alterar vencimento: '+error.message);return}
+    loadData();
+    return;
+  }
+  const m=value.match(/^(\\d{2})\/(\\d{2})\/(\\d{4})$/);
+  if(!m){alert('Use o formato DD/MM/AAAA.');return}
+  const iso=`${m[3]}-${m[2]}-${m[1]}`;
+  const d=new Date(iso+'T00:00:00');
+  if(Number.isNaN(d.getTime()) || d.getFullYear()!=Number(m[3]) || d.getMonth()+1!=Number(m[2]) || d.getDate()!=Number(m[1])){
+    alert('Digite uma data válida.');
+    return;
+  }
+  const {error}=await db.from('lancamentos').update({vencimento:iso}).eq('id',id);
+  if(error){alert('Erro ao alterar vencimento: '+error.message);return}
+  loadData();
+}
+
 async function togglePaid(id, currentPaid){
   const {error}=await db.from('lancamentos').update({pago:!currentPaid}).eq('id',id);
   if(error){alert('Erro ao atualizar pagamento: '+error.message);return}
   loadData();
 }
 
-async function editItem(id, currentValue){
+async function editItem(id, currentValue, currentDue=null, isExpense=false){
   const current = Number(currentValue).toFixed(2).replace('.', ',');
   const answer = prompt('Digite o novo valor (R$):', current);
   if(answer === null) return;
@@ -88,7 +111,28 @@ async function editItem(id, currentValue){
     return;
   }
 
-  const {error}=await db.from('lancamentos').update({valor}).eq('id',id);
+  let vencimento = currentDue;
+  if(isExpense){
+    const shownDate = currentDue ? currentDue.split('-').reverse().join('/') : '';
+    const dateAnswer = prompt('Digite o vencimento (DD/MM/AAAA):', shownDate);
+    if(dateAnswer === null) return;
+
+    const value = dateAnswer.trim();
+    if(value === ''){
+      vencimento = null;
+    } else {
+      const m=value.match(/^(\\d{2})\\/(\\d{2})\\/(\\d{4})$/);
+      if(!m){alert('Use o formato DD/MM/AAAA.');return}
+      vencimento=`${m[3]}-${m[2]}-${m[1]}`;
+      const d=new Date(vencimento+'T00:00:00');
+      if(Number.isNaN(d.getTime()) || d.getFullYear()!=Number(m[3]) || d.getMonth()+1!=Number(m[2]) || d.getDate()!=Number(m[1])){
+        alert('Digite uma data válida.');
+        return;
+      }
+    }
+  }
+
+  const {error}=await db.from('lancamentos').update({valor,vencimento}).eq('id',id);
   if(error){alert('Erro ao editar: '+error.message);return}
   loadData();
 }
@@ -105,7 +149,7 @@ function render(rows){
 }
 function renderList(id,rows){
  const el=document.getElementById(id); if(!rows.length){el.innerHTML='<div class="empty">Nenhum lançamento.</div>';return}
- el.innerHTML=rows.slice().reverse().map(x=>{const isExpense=x.tipo==='despesa';const paid=!!x.pago;const due=x.vencimento?`<span class="due">Vencimento: ${new Date(x.vencimento+'T00:00:00').toLocaleDateString('pt-BR')}</span>`:'';return `<div class="item ${paid?'is-paid':''}"><div><b>${esc(x.descricao)}</b><small>${new Date(x.criado_em).toLocaleString('pt-BR')}</small>${due}</div><span class="amount">${money(x.valor)}</span><div class="actions">${isExpense?`<button class="paid ${paid?'':'off'}" onclick="togglePaid('${x.id}',${paid})">${paid?'Pago':'Pagar'}</button>`:''}<button class="edit" onclick="editItem('${x.id}',${Number(x.valor)})">Editar</button><button class="delete" onclick="removeItem('${x.id}')">Excluir</button></div></div>`}).join('');
+ el.innerHTML=rows.slice().reverse().map(x=>{const isExpense=x.tipo==='despesa';const paid=!!x.pago;const due=isExpense?`<span class="due">Vencimento: ${x.vencimento?new Date(x.vencimento+'T00:00:00').toLocaleDateString('pt-BR'):'Não informado'} <button class="edit" onclick="editDueDate('${x.id}',${x.vencimento?`'${x.vencimento}'`:'null'})">${x.vencimento?'Alterar':'Adicionar'}</button></span>`:'';return `<div class="item ${paid?'is-paid':''}"><div><b>${esc(x.descricao)}</b><small>${new Date(x.criado_em).toLocaleString('pt-BR')}</small>${due}</div><span class="amount">${money(x.valor)}</span><div class="actions">${isExpense?`<button class="paid ${paid?'':'off'}" onclick="togglePaid('${x.id}',${paid})">${paid?'Pago':'Pagar'}</button>`:''}<button class="edit" onclick="editItem('${x.id}',${Number(x.valor)},${x.vencimento?`'${x.vencimento}'`:'null'},${isExpense})">Editar</button><button class="delete" onclick="removeItem('${x.id}')">Excluir</button></div></div>`}).join('');
 }
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 db.auth.onAuthStateChange((event,session)=>{if(session)showApp();else showLogin();});
