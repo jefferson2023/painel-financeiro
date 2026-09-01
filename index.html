@@ -33,12 +33,12 @@ button,input{font:inherit}.hidden{display:none!important}
  <div class="top"><div class="brand"><h1>💰 Painel Financeiro</h1><p class="muted">Receitas, despesas e saldo</p></div><button class="logout" onclick="signOut()">Sair</button></div>
  <div class="summary">
   <div class="card"><span class="label">Total de receitas</span><strong id="totalIncome">R$ 0,00</strong></div>
-  <div class="card"><span class="label">Total de despesas</span><strong id="totalExpense">R$ 0,00</strong></div>
+  <div class="card"><span class="label">Total de despesas em aberto</span><strong id="totalExpense">R$ 0,00</strong></div>
   <div class="card balance"><span class="label">Sobra (receitas − despesas)</span><strong id="balance">R$ 0,00</strong></div>
  </div>
  <div class="forms">
   <section class="panel income"><h2>Receitas</h2><input id="incomeDesc" placeholder="Descrição da receita"><input id="incomeValue" type="number" min="0" step="0.01" placeholder="Valor (R$)"><button class="add" onclick="addTransaction('receita')">+ Adicionar receita</button><div id="incomeList" class="list"></div></section>
-  <section class="panel expense"><h2>Despesas</h2><input id="expenseDesc" placeholder="Descrição da despesa"><input id="expenseValue" type="number" min="0" step="0.01" placeholder="Valor (R$)"><button class="add" onclick="addTransaction('despesa')">+ Adicionar despesa</button><div id="expenseList" class="list"></div></section>
+  <section class="panel expense"><h2>Despesas</h2><input id="expenseDesc" placeholder="Descrição da despesa"><input id="expenseValue" type="number" min="0" step="0.01" placeholder="Valor (R$)"><label class="date-label" for="expenseDue">Vencimento</label><input id="expenseDue" type="date"><button class="add" onclick="addTransaction('despesa')">+ Adicionar despesa</button><div id="expenseList" class="list"></div></section>
  </div>
 </div>
 <script>
@@ -65,10 +65,16 @@ async function addTransaction(tipo){
  const descId=tipo==='receita'?'incomeDesc':'expenseDesc', valId=tipo==='receita'?'incomeValue':'expenseValue';
  const descricao=document.getElementById(descId).value.trim(), valor=Number(document.getElementById(valId).value);
  if(!descricao||!valor||valor<0){alert('Informe a descrição e um valor válido.');return}
- const {error}=await db.from('lancamentos').insert({tipo,descricao,valor});
+ const vencimento=tipo==='despesa'?document.getElementById('expenseDue').value:null; const {error}=await db.from('lancamentos').insert({tipo,descricao,valor,vencimento,pago:false});
  if(error){alert('Erro ao salvar: '+error.message);return}
- document.getElementById(descId).value='';document.getElementById(valId).value='';loadData();
+ document.getElementById(descId).value='';document.getElementById(valId).value='';if(tipo==='despesa')document.getElementById('expenseDue').value='';loadData();
 }
+async function togglePaid(id, currentPaid){
+  const {error}=await db.from('lancamentos').update({pago:!currentPaid}).eq('id',id);
+  if(error){alert('Erro ao atualizar pagamento: '+error.message);return}
+  loadData();
+}
+
 async function editItem(id, currentValue){
   const current = Number(currentValue).toFixed(2).replace('.', ',');
   const answer = prompt('Digite o novo valor (R$):', current);
@@ -93,13 +99,13 @@ async function removeItem(id){
 }
 function render(rows){
  const receitas=rows.filter(x=>x.tipo==='receita'), despesas=rows.filter(x=>x.tipo==='despesa');
- const tr=receitas.reduce((s,x)=>s+Number(x.valor),0), td=despesas.reduce((s,x)=>s+Number(x.valor),0);
+ const tr=receitas.reduce((s,x)=>s+Number(x.valor),0), td=despesas.filter(x=>!x.pago).reduce((s,x)=>s+Number(x.valor),0);
  document.getElementById('totalIncome').textContent=money(tr);document.getElementById('totalExpense').textContent=money(td);document.getElementById('balance').textContent=money(tr-td);
  renderList('incomeList',receitas);renderList('expenseList',despesas);
 }
 function renderList(id,rows){
  const el=document.getElementById(id); if(!rows.length){el.innerHTML='<div class="empty">Nenhum lançamento.</div>';return}
- el.innerHTML=rows.slice().reverse().map(x=>`<div class="item"><div><b>${esc(x.descricao)}</b><small>${new Date(x.criado_em).toLocaleString('pt-BR')}</small></div><span class="amount">${money(x.valor)}</span><div class="actions"><button class="edit" onclick="editItem('${x.id}',${Number(x.valor)})">Editar</button><button class="delete" onclick="removeItem('${x.id}')">Excluir</button></div></div>`).join('');
+ el.innerHTML=rows.slice().reverse().map(x=>{const isExpense=x.tipo==='despesa';const paid=!!x.pago;const due=x.vencimento?`<span class="due">Vencimento: ${new Date(x.vencimento+'T00:00:00').toLocaleDateString('pt-BR')}</span>`:'';return `<div class="item ${paid?'is-paid':''}"><div><b>${esc(x.descricao)}</b><small>${new Date(x.criado_em).toLocaleString('pt-BR')}</small>${due}</div><span class="amount">${money(x.valor)}</span><div class="actions">${isExpense?`<button class="paid ${paid?'':'off'}" onclick="togglePaid('${x.id}',${paid})">${paid?'Pago':'Pagar'}</button>`:''}<button class="edit" onclick="editItem('${x.id}',${Number(x.valor)})">Editar</button><button class="delete" onclick="removeItem('${x.id}')">Excluir</button></div></div>`}).join('');
 }
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 db.auth.onAuthStateChange((event,session)=>{if(session)showApp();else showLogin();});
