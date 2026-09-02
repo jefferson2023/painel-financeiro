@@ -63,7 +63,12 @@ const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 function money(v){return Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
 function showLogin(msg=""){document.getElementById('login').classList.remove('hidden');document.getElementById('app').classList.add('hidden');document.getElementById('loginError').textContent=msg}
-function showApp(){document.getElementById('login').classList.add('hidden');document.getElementById('app').classList.remove('hidden');loadData();}
+async function showApp(){
+ document.getElementById('login').classList.add('hidden');
+ document.getElementById('app').classList.remove('hidden');
+ if(!Number.isFinite(btcBrl)) await fetchBitcoinPrice();
+ loadData();
+}
 async function signIn(){
  const email=document.getElementById('email').value.trim(), password=document.getElementById('password').value;
  const {error}=await db.auth.signInWithPassword({email,password});
@@ -74,7 +79,8 @@ async function signOut(){await db.auth.signOut();showLogin();}
 async function loadData(){
  const {data,error}=await db.from('lancamentos').select('*').order('criado_em',{ascending:true});
  if(error){alert('Não foi possível carregar os lançamentos. Verifique as políticas do banco.');console.error(error);return}
- render(data||[]);
+ window.__lancamentos = data || [];
+ render(window.__lancamentos);
 }
 function openAddModal(tipo){
   window.modalTipo=tipo;
@@ -151,11 +157,25 @@ async function togglePaid(id, currentPaid){
 }
 
 async function editItem(id, currentValue, currentDue=null, isExpense=false){
-  const current = Number(currentValue).toFixed(2).replace('.', ',');
-  const answer = prompt('Digite o novo valor (R$):', current);
+  const isBtc = !isExpense && (() => {
+    const item = window.__lancamentos?.find(x => String(x.id) === String(id));
+    return item && /bitcoin|\\bbtc\\b/i.test(String(item.descricao || ''));
+  })();
+
+  const current = isBtc
+    ? Number(currentValue).toFixed(8).replace('.', ',')
+    : Number(currentValue).toFixed(2).replace('.', ',');
+
+  const answer = prompt(
+    isBtc ? 'Digite a quantidade de Bitcoin (BTC):' : 'Digite o novo valor (R$):',
+    current
+  );
   if(answer === null) return;
 
-  const normalized = answer.trim().replace(/\\./g,'').replace(',', '.');
+  const normalized = isBtc
+    ? answer.trim().replace(',', '.')
+    : answer.trim().replace(/\\./g,'').replace(',', '.');
+
   const valor = Number(normalized);
 
   if(!Number.isFinite(valor) || valor < 0){
@@ -173,57 +193,24 @@ async function editItem(id, currentValue, currentDue=null, isExpense=false){
     if(value === ''){
       vencimento = null;
     } else {
-      let iso = '';
-      let m = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-      if(m){
-        iso = `${m[3]}-${m[2]}-${m[1]}`;
-      } else {
-        m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-        if(m) iso = value;
+      let isValid = false;
+      const parts = value.split('/');
+      if(parts.length === 3){
+        const d = Number(parts[0]), m = Number(parts[1]), y = Number(parts[2]);
+        const dt = new Date(y, m-1, d);
+        isValid = dt.getFullYear()===y && dt.getMonth()===m-1 && dt.getDate()===d;
       }
-
-      if(!iso){alert('Data inválida. Use DD/MM/AAAA, por exemplo 01/09/2026.');return}
-      const d=new Date(iso+'T00:00:00');
-      if(Number.isNaN(d.getTime()) || d.getFullYear()!=Number(iso.slice(0,4)) || d.getMonth()+1!=Number(iso.slice(5,7)) || d.getDate()!=Number(iso.slice(8,10))){
-        alert('Digite uma data válida.');
+      if(!isValid){
+        alert('Data inválida. Use DD/MM/AAAA.');
         return;
       }
-      vencimento=iso;
+      const [d,m,y] = parts;
+      vencimento = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     }
   }
 
-  const {error}=await db.from('lancamentos').update({valor,vencimento}).eq('id',id);
-  if(error){alert('Erro ao editar: '+error.message);return}
-  loadData();
+  updateItem(id,{valor,vencimento});
 }
-
-async function removeItem(id){
- const {error}=await db.from('lancamentos').delete().eq('id',id);
- if(error){alert('Erro ao excluir: '+error.message);return}loadData();
-}
-
-let btcBrl = null;
-let btcLastUpdated = null;
-let btcLoading = false;
-
-async function fetchBitcoinPrice(){
-  if(btcLoading) return;
-  btcLoading = true;
-  try{
-    const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=brl', {cache:'no-store'});
-    if(!r.ok) throw new Error('Falha na cotação');
-    const data = await r.json();
-    const price = Number(data?.bitcoin?.brl);
-    if(!Number.isFinite(price) || price <= 0) throw new Error('Cotação inválida');
-    btcBrl = price;
-    btcLastUpdated = new Date();
-  }catch(e){
-    console.error('Bitcoin:', e);
-  }finally{
-    btcLoading = false;
-  }
-}
-
 function isBitcoin(x){
   return x && x.tipo === 'receita' && /bitcoin|\bbtc\b/i.test(String(x.descricao || ''));
 }
@@ -244,11 +231,11 @@ function displayValue(x){
 function renderBitcoinRefreshInfo(){
   const el = document.getElementById('bitcoinStatus');
   if(!el) return;
-  if(btcBrl){
+  if(Number.isFinite(btcBrl) && btcBrl > 0){
     const when = btcLastUpdated ? btcLastUpdated.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
     el.textContent = `BTC: ${money(btcBrl)} • atualizado às ${when}`;
   }else{
-    el.textContent = 'BTC: aguardando cotação...';
+    el.textContent = 'BTC: cotação indisponível no momento';
   }
 }
 
@@ -271,7 +258,6 @@ function renderList(id,rows){
 }
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 db.auth.onAuthStateChange((event,session)=>{if(session)showApp();else showLogin();});
-fetchBitcoinPrice().then(loadData);
 setInterval(async()=>{await fetchBitcoinPrice();loadData();},60000);
 document.getElementById('password').addEventListener('keydown',e=>{if(e.key==='Enter')signIn()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeAddModal()});
