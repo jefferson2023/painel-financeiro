@@ -252,6 +252,8 @@ function render(rows){
 function renderList(id,rows){
  const el=document.getElementById(id); if(!rows.length){el.innerHTML='<div class="empty">Nenhum lançamento.</div>';return}
  if(id==='expenseList'){ rows=rows.slice().sort((a,b)=>{
+  const aPaid=!!a.pago, bPaid=!!b.pago;
+  if(aPaid!==bPaid) return aPaid ? 1 : -1;
   if(!a.vencimento && !b.vencimento) return 0;
   if(!a.vencimento) return 1;
   if(!b.vencimento) return -1;
