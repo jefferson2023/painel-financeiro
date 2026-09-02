@@ -233,15 +233,13 @@ function bitcoinQuantity(x){
 }
 
 function displayValue(x){
-  if(isBitcoin(x) && Number.isFinite(btcBrl)){
+  if(isBitcoin(x)){
+    if(!Number.isFinite(btcBrl)) return null;
     return bitcoinQuantity(x) * btcBrl;
   }
   return Number(x.valor);
 }
 
-function formatBitcoinQuantity(q){
-  return Number(q).toLocaleString('pt-BR',{minimumFractionDigits:6,maximumFractionDigits:8}) + ' BTC';
-}
 
 function renderBitcoinRefreshInfo(){
   const el = document.getElementById('bitcoinStatus');
@@ -256,7 +254,7 @@ function renderBitcoinRefreshInfo(){
 
 function render(rows){
  const receitas=rows.filter(x=>x.tipo==='receita'), despesas=rows.filter(x=>x.tipo==='despesa');
- const tr=receitas.reduce((s,x)=>s+displayValue(x),0), td=despesas.filter(x=>!x.pago).reduce((s,x)=>s+Number(x.valor),0);
+ const tr=receitas.reduce((s,x)=>{const v=displayValue(x);return s+(v===null?0:v)},0), td=despesas.filter(x=>!x.pago).reduce((s,x)=>s+Number(x.valor),0);
  document.getElementById('totalIncome').textContent=money(tr);document.getElementById('totalExpense').textContent=money(td);document.getElementById('balance').textContent=money(tr-td);
  renderList('incomeList',receitas);renderList('expenseList',despesas);
  renderBitcoinRefreshInfo();
@@ -269,7 +267,7 @@ function renderList(id,rows){
   if(!b.vencimento) return -1;
   return a.vencimento.localeCompare(b.vencimento);
  }); } else { rows=rows.slice().reverse(); }
- el.innerHTML=rows.map(x=>{const isExpense=x.tipo==='despesa';const paid=!!x.pago;const due=isExpense?`<span class="due">Venc: ${x.vencimento?`DIA ${String(new Date(x.vencimento+'T00:00:00').getDate()).padStart(2,'0')}`:'Não informado'} <button class="edit" onclick="editDueDate('${x.id}',${x.vencimento?`'${x.vencimento}'`:'null'})">${x.vencimento?'Alterar':'Adicionar'}</button></span>`:'';const btc=isBitcoin(x)?`<small class="btc-qty">${formatBitcoinQuantity(bitcoinQuantity(x))}</small>`:'';return `<div class="item ${paid?'is-paid':''}"><div><b>${esc(x.descricao)}</b>${btc}${due}</div><span class="amount">${money(displayValue(x))}</span><div class="actions">${isExpense?`<button class="paid ${paid?'':'off'}" onclick="togglePaid('${x.id}',${paid})">${paid?'Pago':'Pagar'}</button>`:''}<button class="edit" onclick="editItem('${x.id}',${Number(x.valor)},${x.vencimento?`'${x.vencimento}'`:'null'},${isExpense})">Editar</button><button class="delete" onclick="removeItem('${x.id}')">Excluir</button></div></div>`}).join('');
+ el.innerHTML=rows.map(x=>{const isExpense=x.tipo==='despesa';const paid=!!x.pago;const due=isExpense?`<span class="due">Venc: ${x.vencimento?`DIA ${String(new Date(x.vencimento+'T00:00:00').getDate()).padStart(2,'0')}`:'Não informado'} <button class="edit" onclick="editDueDate('${x.id}',${x.vencimento?`'${x.vencimento}'`:'null'})">${x.vencimento?'Alterar':'Adicionar'}</button></span>`:'';const btc='';return `<div class="item ${paid?'is-paid':''}"><div><b>${esc(x.descricao)}</b>${btc}${due}</div><span class="amount">${displayValue(x)===null?'Cotação...':money(displayValue(x))}</span><div class="actions">${isExpense?`<button class="paid ${paid?'':'off'}" onclick="togglePaid('${x.id}',${paid})">${paid?'Pago':'Pagar'}</button>`:''}<button class="edit" onclick="editItem('${x.id}',${Number(x.valor)},${x.vencimento?`'${x.vencimento}'`:'null'},${isExpense})">Editar</button><button class="delete" onclick="removeItem('${x.id}')">Excluir</button></div></div>`}).join('');
 }
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 db.auth.onAuthStateChange((event,session)=>{if(session)showApp();else showLogin();});
