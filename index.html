@@ -172,7 +172,13 @@ function render(rows){
 }
 function renderList(id,rows){
  const el=document.getElementById(id); if(!rows.length){el.innerHTML='<div class="empty">Nenhum lançamento.</div>';return}
- el.innerHTML=rows.slice().reverse().map(x=>{const isExpense=x.tipo==='despesa';const paid=!!x.pago;const due=isExpense?`<span class="due">Venc: ${x.vencimento?new Date(x.vencimento+'T00:00:00').toLocaleDateString('pt-BR'):'Não informado'} <button class="edit" onclick="editDueDate('${x.id}',${x.vencimento?`'${x.vencimento}'`:'null'})">${x.vencimento?'Alterar':'Adicionar'}</button></span>`:'';return `<div class="item ${paid?'is-paid':''}"><div><b>${esc(x.descricao)}</b>${due}</div><span class="amount">${money(x.valor)}</span><div class="actions">${isExpense?`<button class="paid ${paid?'':'off'}" onclick="togglePaid('${x.id}',${paid})">${paid?'Pago':'Pagar'}</button>`:''}<button class="edit" onclick="editItem('${x.id}',${Number(x.valor)},${x.vencimento?`'${x.vencimento}'`:'null'},${isExpense})">Editar</button><button class="delete" onclick="removeItem('${x.id}')">Excluir</button></div></div>`}).join('');
+ if(id==='expenseList'){ rows=rows.slice().sort((a,b)=>{
+  if(!a.vencimento && !b.vencimento) return 0;
+  if(!a.vencimento) return 1;
+  if(!b.vencimento) return -1;
+  return a.vencimento.localeCompare(b.vencimento);
+ }); } else { rows=rows.slice().reverse(); }
+ el.innerHTML=rows.map(x=>{const isExpense=x.tipo==='despesa';const paid=!!x.pago;const due=isExpense?`<span class="due">Venc: ${x.vencimento?`DIA ${String(new Date(x.vencimento+'T00:00:00').getDate()).padStart(2,'0')}`:'Não informado'} <button class="edit" onclick="editDueDate('${x.id}',${x.vencimento?`'${x.vencimento}'`:'null'})">${x.vencimento?'Alterar':'Adicionar'}</button></span>`:'';return `<div class="item ${paid?'is-paid':''}"><div><b>${esc(x.descricao)}</b>${due}</div><span class="amount">${money(x.valor)}</span><div class="actions">${isExpense?`<button class="paid ${paid?'':'off'}" onclick="togglePaid('${x.id}',${paid})">${paid?'Pago':'Pagar'}</button>`:''}<button class="edit" onclick="editItem('${x.id}',${Number(x.valor)},${x.vencimento?`'${x.vencimento}'`:'null'},${isExpense})">Editar</button><button class="delete" onclick="removeItem('${x.id}')">Excluir</button></div></div>`}).join('');
 }
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 db.auth.onAuthStateChange((event,session)=>{if(session)showApp();else showLogin();});
